@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Estudio CRUD - Solo $.ajax</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        body { font-family: Arial; margin: 30px; line-height: 1.6; }
+        .box { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 8px; background: #fdfdfd; }
+        input { padding: 8px; margin: 5px 0; width: 220px; display: block; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+        th { background: #0056b3; color: white; }
+        button { padding: 8px 15px; cursor: pointer; border: none; color: white; border-radius: 4px; }
+        .btn-search { background: #6c757d; }
+        .btn-save { background: #28a745; }
+        .btn-edit { background: #ffc107; color: black; }
+        .btn-delete { background: #dc3545; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <h3>🔍 Buscar Estudiante</h3>
+        <input type="text" id="txtBuscar" placeholder="Cédula a buscar..." style="display:inline-block">
+        <button class="btn btn-search" onclick="buscar()">Ejecutar Buscar</button>
+        <button class="btn btn-search" onclick="listar()" style="background:#444">Mostrar Todos</button>
+    </div>
+
+    <div class="box">
+        <h3 id="formTitle">📝 Registro de Estudiante</h3>
+        <input type="hidden" id="modo" value="nuevo">
+        <input type="text" id="cedula" placeholder="Cédula">
+        <input type="text" id="nombre" placeholder="Nombre">
+        <input type="text" id="apellido" placeholder="Apellido">
+        <input type="text" id="telefono" placeholder="Teléfono">
+        <button id="btnAccion" class="btn btn-save" onclick="guardar()">Guardar Estudiante</button>
+        <button onclick="limpiar()" style="color:#333; background:#eee">Cancelar</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cédula</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="cuerpoTabla"></tbody>
+    </table>
+
+    <script>
+        const API_URL = '../controller/Api.php';
+
+        $(document).ready(function() {
+            listar(); // Cargar al inicio
+        });
+
+        // --- LISTAR (GET) ---
+        function listar() {
+            $.ajax({
+                url: API_URL,
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    dibujarTabla(data);
+                },
+                error: function() { alert("Error al cargar lista"); }
+            });
+        }
+
+        // --- BUSCAR (GET con parámetros) ---
+        function buscar() {
+            const cedula = $('#txtBuscar').val().trim();
+            if (cedula === "") return listar();
+
+            $.ajax({
+                url: API_URL,
+                type: 'GET',
+                data: { cedula: cedula }, // jQuery lo pega a la URL: ?cedula=XXX
+                dataType: 'json',
+                success: function(data) {
+                    // Si el API devuelve un solo objeto, lo hacemos array
+                    const resultado = Array.isArray(data) ? data : [data];
+                    if(resultado[0] === null || resultado.length === 0) {
+                        alert("No encontrado");
+                        $('#cuerpoTabla').empty();
+                    } else {
+                        dibujarTabla(resultado);
+                    }
+                },
+                error: function() { alert("Error en la búsqueda"); }
+            });
+        }
+
+        // --- GUARDAR (POST para nuevo, PUT para editar) ---
+        function guardar() {
+            const modo = $('#modo').val();
+            const estudiante = {
+                cedula: $('#cedula').val(),
+                nombre: $('#nombre').val(),
+                apellido: $('#apellido').val(),
+                telefono: $('#telefono').val()
+            };
+
+            if (modo === 'nuevo') {
+                $.ajax({
+                    url: API_URL,
+                    type: 'POST',
+                    data: estudiante,
+                    dataType: 'json',
+                    success: function(res) {
+                        alert(res.message);
+                        listar();
+                        limpiar();
+                    }
+                });
+            } else {
+                // ACTUALIZAR (Vía URL params como definimos en tu Cruds.php)
+                $.ajax({
+                    url: API_URL + '?' + $.param(estudiante),
+                    type: 'PUT',
+                    dataType: 'json',
+                    success: function(res) {
+                        alert(res.message);
+                        listar();
+                        limpiar();
+                    }
+                });
+            }
+        }
+
+        // --- ELIMINAR (DELETE) ---
+        function eliminar(ced) {
+            if(!confirm("¿Borrar cédula " + ced + "?")) return;
+
+            $.ajax({
+                url: API_URL + '?cedula=' + ced,
+                type: 'DELETE',
+                dataType: 'json',
+                success: function(res) {
+                    alert(res.message);
+                    listar();
+                }
+            });
+        }
+
+        // --- FUNCIONES DE APOYO ---
+        function dibujarTabla(datos) {
+            let html = '';
+            datos.forEach(est => {
+                if(!est) return;
+                html += `<tr>
+                    <td>${est.cedula}</td>
+                    <td>${est.nombre}</td>
+                    <td>${est.apellido}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick='prepararEdicion(${JSON.stringify(est)})'>Editar</button>
+                        <button class="btn btn-delete" onclick="eliminar('${est.cedula}')">Borrar</button>
+                    </td>
+                </tr>`;
+            });
+            $('#cuerpoTabla').html(html);
+        }
+
+        function prepararEdicion(est) {
+            $('#modo').val('editar');
+            $('#formTitle').text('📝 Editando Estudiante');
+            $('#cedula').val(est.cedula).prop('readonly', true);
+            $('#nombre').val(est.nombre);
+            $('#apellido').val(est.apellido);
+            $('#telefono').val(est.telefono);
+            $('#btnAccion').text('Actualizar Cambios').css('background', '#007bff');
+        }
+
+        function limpiar() {
+            $('#modo').val('nuevo');
+            $('#formTitle').text('📝 Registro de Estudiante');
+            $('#cedula').val('').prop('readonly', false);
+            $('#nombre').val(''); $('#apellido').val(''); $('#telefono').val('');
+            $('#btnAccion').text('Guardar Estudiante').css('background', '#28a745');
+        }
+    </script>
+</body>
+</html>
